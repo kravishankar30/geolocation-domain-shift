@@ -12,7 +12,11 @@ dependencies = [
     "pandas>=2.0.0",
     "numpy>=1.24.0",
     "tqdm>=4.65.0",
+    "open_clip_torch>=2.20.0",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0"]
 
 [build-system]
 requires = ["hatchling"]
