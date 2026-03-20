@@ -118,7 +118,7 @@ class GeolocationCLIP(nn.Module):
 
     @torch.no_grad()
     def build_text_embeddings(self):
-        """Compute and register normalised text embeddings for zero-shot inference."""
+        """Compute and register normalized text embeddings for zero-shot inference."""
         device = next(self.clip.parameters()).device
         prompts = [self.prompt_template.format(c) for c in self.class_names]
         tokens = self.tokenizer(prompts).to(device)
@@ -132,7 +132,7 @@ class GeolocationCLIP(nn.Module):
     # ------------------------------------------------------------------
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
-        """Return raw (unnormalised) image embeddings."""
+        """Return raw (unnormalized) image embeddings."""
         return self.clip.encode_image(images)
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
@@ -158,7 +158,7 @@ class GeolocationCLIP(nn.Module):
     # ------------------------------------------------------------------
 
     def trainable_parameters(self):
-        """Yield only parameters that require grad (for optimiser construction)."""
+        """Yield only parameters that require grad (for optimizer construction)."""
         return (p for p in self.parameters() if p.requires_grad)
 
     def parameter_counts(self) -> dict[str, int]:
