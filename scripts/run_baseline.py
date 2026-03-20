@@ -229,24 +229,28 @@ def main():
     device = torch.device(args.device)
     print(f"Device: {device}")
 
-    # Load data and download shards
-    print("\n--- Loading datasets and downloading shards ---")
+    # Load data and download shards (single pool, split into train/test)
+    print("\n--- Loading dataset and downloading shards ---")
     max_shards = args.max_shards if args.max_shards > 0 else None
     t0 = time.time()
-    train_ds = OSV5MDataset("train", args.train_size, args.seed, args.cache_dir, args.extract_dir, max_shards=max_shards)
-    train_ds.download_images()
-    test_ds = OSV5MDataset("test", args.test_size, args.seed, args.cache_dir, args.extract_dir, max_shards=max_shards)
-    test_ds.download_images()
+    total_size = args.train_size + args.test_size
+    full_ds = OSV5MDataset("train", total_size, args.seed, args.cache_dir, args.extract_dir, max_shards=max_shards)
+    full_ds.download_images()
     print(f"Download took {time.time() - t0:.1f}s")
 
-    # Harmonize label mapping across splits
-    all_countries = sorted(set(train_ds.country_to_label) | set(test_ds.country_to_label))
-    mapping = {c: i for i, c in enumerate(all_countries)}
-    reverse = {i: c for c, i in mapping.items()}
-    for ds in (train_ds, test_ds):
-        ds.country_to_label = mapping
-        ds.label_to_country = reverse
-    num_classes = len(all_countries)
+    # Split into train/test from the same pool
+    n = len(full_ds)
+    rng = np.random.RandomState(args.seed)
+    indices = rng.permutation(n)
+    n_test = min(args.test_size, n // 5)  # cap at 20%
+    test_idx = indices[:n_test]
+    train_idx = indices[n_test:n_test + args.train_size]
+
+    train_ds = torch.utils.data.Subset(full_ds, train_idx)
+    test_ds = torch.utils.data.Subset(full_ds, test_idx)
+
+    num_classes = full_ds.num_classes
+    all_countries = [full_ds.label_to_country[i] for i in range(num_classes)]
     print(f"Countries: {num_classes}, Train: {len(train_ds)}, Test: {len(test_ds)}")
 
     # Build model (encoder + text embeddings)
