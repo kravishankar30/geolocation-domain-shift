@@ -76,7 +76,7 @@ class OSV5MDataset(Dataset):
 
         for i, shard_idx in enumerate(self._selected_shards, 1):
             # Check if already extracted
-            shard_dir = self.extract_dir / str(shard_idx)
+            shard_dir = self.extract_dir / f"{shard_idx:02d}"
             if shard_dir.exists() and any(shard_dir.iterdir()):
                 print(f"[{i}/{total}] Shard {shard_idx:02d} already extracted, skipping.", flush=True)
                 continue
@@ -96,7 +96,7 @@ class OSV5MDataset(Dataset):
         # Scan disk for all available images
         self._id_to_path = {}
         for shard_idx in self._selected_shards:
-            shard_dir = self.extract_dir / str(shard_idx)
+            shard_dir = self.extract_dir / f"{shard_idx:02d}"
             if not shard_dir.exists():
                 continue
             for f in shard_dir.iterdir():
