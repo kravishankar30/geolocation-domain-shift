@@ -43,7 +43,7 @@ def parse_args():
     p.add_argument("--output_dir", type=str, default="results/baseline")
     p.add_argument("--cache_dir", type=str, default="./data/osv5m_cache")
     p.add_argument("--extract_dir", type=str, default="./data/osv5m_images")
-    p.add_argument("--max_shards", type=int, default=4, help="Max shards to download (0=all)")
+    p.add_argument("--max_shards", type=int, default=1, help="Max shards to download (0=all)")
     return p.parse_args()
 
 

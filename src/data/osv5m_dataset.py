@@ -109,17 +109,21 @@ class OSV5MDataset(Dataset):
 
     def download_images(self) -> None:
         os.makedirs(self.extract_dir, exist_ok=True)
-        for shard_idx in sorted(self._shard_to_ids):
+        total = len(self._shard_to_ids)
+        for i, shard_idx in enumerate(sorted(self._shard_to_ids), 1):
             if shard_idx in self._downloaded_shards:
                 continue
+            print(f"[{i}/{total}] Downloading shard {shard_idx:02d}...", flush=True)
             zip_path = hf_hub_download(
                 repo_id=REPO_ID,
                 filename=f"images/{self.split}/{shard_idx:02d}.zip",
                 repo_type="dataset",
                 cache_dir=self.cache_dir,
             )
+            print(f"[{i}/{total}] Extracting shard {shard_idx:02d}...", flush=True)
             with zipfile.ZipFile(zip_path) as zf:
                 zf.extractall(self.extract_dir)
+            print(f"[{i}/{total}] Shard {shard_idx:02d} done.", flush=True)
             self._downloaded_shards.add(shard_idx)
 
     def _find_image(self, image_id: str) -> Path | None:
