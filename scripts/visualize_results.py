@@ -106,7 +106,7 @@ def plot_per_class(zs_pc, lp_pc, label_map, out_dir, top_n=15):
 
     for subset, name in [(top, "top"), (bottom, "bottom")]:
         class_ids = [c for c, _ in subset]
-        countries = [label_map.get(int(c), f"Class {c}") for c in class_ids]
+        countries = [label_map.get(str(int(c)), f"Class {c}") for c in class_ids]
         lp_accs = [lp_pc.get(c, 0) for c in class_ids]
         zs_accs = [zs_pc.get(c, 0) for c in class_ids]
 
