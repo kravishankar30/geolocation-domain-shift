@@ -13,6 +13,7 @@ Outputs saved to results/baseline/:
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
@@ -42,6 +43,7 @@ def parse_args():
     p.add_argument("--output_dir", type=str, default="results/baseline")
     p.add_argument("--cache_dir", type=str, default="./data/osv5m_cache")
     p.add_argument("--extract_dir", type=str, default="./data/osv5m_images")
+    p.add_argument("--max_shards", type=int, default=4, help="Max shards to download (0=all)")
     return p.parse_args()
 
 
@@ -207,6 +209,7 @@ def train_linear_probe(
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
     emb_dir = Path(args.output_dir) / "embeddings"
@@ -219,8 +222,9 @@ def main():
 
     # Load data
     print("\n--- Loading datasets ---")
-    train_ds = OSV5MDataset("train", args.train_size, args.seed, args.cache_dir, args.extract_dir)
-    test_ds = OSV5MDataset("test", args.test_size, args.seed, args.cache_dir, args.extract_dir)
+    max_shards = args.max_shards if args.max_shards > 0 else None
+    train_ds = OSV5MDataset("train", args.train_size, args.seed, args.cache_dir, args.extract_dir, max_shards=max_shards)
+    test_ds = OSV5MDataset("test", args.test_size, args.seed, args.cache_dir, args.extract_dir, max_shards=max_shards)
 
     # Harmonize label mapping across splits
     all_countries = sorted(set(train_ds.country_to_label) | set(test_ds.country_to_label))

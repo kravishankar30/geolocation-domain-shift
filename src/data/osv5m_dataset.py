@@ -40,6 +40,7 @@ class OSV5MDataset(Dataset):
         seed: int = 42,
         cache_dir: str = "./data/osv5m_cache",
         extract_dir: str = "./data/osv5m_images",
+        max_shards: int | None = None,
     ):
         self.split = split
         self.subset_size = subset_size
@@ -54,13 +55,22 @@ class OSV5MDataset(Dataset):
         csv_path = hf_hub_download(
             repo_id=REPO_ID, filename=f"{split}.csv", repo_type="dataset", cache_dir=cache_dir
         )
-        self.metadata = self._sample(pd.read_csv(csv_path))
+        n_shards = TRAIN_SHARDS if split == "train" else TEST_SHARDS
+        df = pd.read_csv(csv_path)
+
+        # Filter to a subset of shards before sampling to avoid downloading everything
+        if max_shards is not None:
+            rng = np.random.RandomState(seed)
+            selected = set(rng.choice(n_shards, size=min(max_shards, n_shards), replace=False).tolist())
+            df = df[df["id"].apply(lambda x: int(x) % n_shards in selected)]
+            logger.info("Filtered to %d shards (%d images available)", len(selected), len(df))
+
+        self.metadata = self._sample(df)
 
         countries = sorted(self.metadata["country"].dropna().unique())
         self.country_to_label = {c: i for i, c in enumerate(countries)}
         self.label_to_country = {i: c for c, i in self.country_to_label.items()}
 
-        n_shards = TRAIN_SHARDS if split == "train" else TEST_SHARDS
         # shard to image_id map
         for img_id in self.metadata["id"].astype(str):
             self._shard_to_ids[int(img_id) % n_shards].append(img_id)
