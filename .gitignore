@@ -1,6 +1,9 @@
 # Data (downloaded dataset cache, not source code)
 /data/
 
+# Large cached embeddings
+results/*/embeddings/
+
 # Python
 __pycache__/
 *.py[cod]
