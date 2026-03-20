@@ -127,11 +127,18 @@ class OSV5MDataset(Dataset):
             self._downloaded_shards.add(shard_idx)
 
     def _find_image(self, image_id: str) -> Path | None:
+        n_shards = TRAIN_SHARDS if self.split == "train" else TEST_SHARDS
+        shard_dir = self.extract_dir / str(int(image_id) % n_shards)
+        for ext in (".jpg", ".jpeg", ".png"):
+            p = shard_dir / f"{image_id}{ext}"
+            if p.exists():
+                return p
+        # Fallback: check extract_dir directly
         for ext in (".jpg", ".jpeg", ".png"):
             p = self.extract_dir / f"{image_id}{ext}"
             if p.exists():
                 return p
-        return next(self.extract_dir.rglob(f"{image_id}.*"), None)
+        return None
 
     def __len__(self) -> int:
         return len(self.metadata)
