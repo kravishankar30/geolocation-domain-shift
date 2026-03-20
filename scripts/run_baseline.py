@@ -220,11 +220,15 @@ def main():
     device = torch.device(args.device)
     print(f"Device: {device}")
 
-    # Load data
-    print("\n--- Loading datasets ---")
+    # Load data and download shards
+    print("\n--- Loading datasets and downloading shards ---")
     max_shards = args.max_shards if args.max_shards > 0 else None
+    t0 = time.time()
     train_ds = OSV5MDataset("train", args.train_size, args.seed, args.cache_dir, args.extract_dir, max_shards=max_shards)
+    train_ds.download_images()
     test_ds = OSV5MDataset("test", args.test_size, args.seed, args.cache_dir, args.extract_dir, max_shards=max_shards)
+    test_ds.download_images()
+    print(f"Download took {time.time() - t0:.1f}s")
 
     # Harmonize label mapping across splits
     all_countries = sorted(set(train_ds.country_to_label) | set(test_ds.country_to_label))
@@ -235,13 +239,6 @@ def main():
         ds.label_to_country = reverse
     num_classes = len(all_countries)
     print(f"Countries: {num_classes}, Train: {len(train_ds)}, Test: {len(test_ds)}")
-
-    # Download images
-    print("\n--- Downloading images ---")
-    t0 = time.time()
-    train_ds.download_images()
-    test_ds.download_images()
-    print(f"Download took {time.time() - t0:.1f}s")
 
     # Build model (encoder + text embeddings)
     print("\n--- Loading CLIP ViT-L/14 ---")
