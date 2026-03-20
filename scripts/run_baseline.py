@@ -52,28 +52,37 @@ def parse_args():
 # ------------------------------------------------------------------
 
 
+class _PreprocessedDataset(torch.utils.data.Dataset):
+    """Wraps OSV5MDataset to return preprocessed tensors + labels."""
+    def __init__(self, dataset, preprocess):
+        self.dataset = dataset
+        self.preprocess = preprocess
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        sample = self.dataset[idx]
+        return self.preprocess(sample["image"]), sample["label"]
+
+
 @torch.no_grad()
 def extract_embeddings(dataset, model, device, batch_size=256):
     """Extract normalized image embeddings and labels from dataset."""
     model.eval()
     all_embs, all_labels = [], []
 
-    # Manual batching since dataset returns dicts with PIL images
-    preprocess = model.preprocess
-    for start in tqdm(range(0, len(dataset), batch_size), desc="Extracting embeddings"):
-        end = min(start + batch_size, len(dataset))
-        images, labels = [], []
-        for i in range(start, end):
-            sample = dataset[i]
-            images.append(preprocess(sample["image"]))
-            labels.append(sample["label"])
+    # Use DataLoader with workers for parallel image loading
+    wrapped = _PreprocessedDataset(dataset, model.preprocess)
+    loader = DataLoader(wrapped, batch_size=batch_size, num_workers=8, pin_memory=True)
 
-        images = torch.stack(images).to(device)
+    for images, labels in tqdm(loader, desc="Extracting embeddings"):
+        images = images.to(device)
         embs = model.encode_image(images)
         embs = F.normalize(embs, dim=-1)
 
         all_embs.append(embs.cpu())
-        all_labels.append(torch.tensor(labels))
+        all_labels.append(labels)
 
     return torch.cat(all_embs), torch.cat(all_labels)
 
