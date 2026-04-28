@@ -6,17 +6,17 @@ The OSV-5M dataset on HuggingFace (osv5m/osv5m) is organized as:
   - images/test/00.zip  ... images/test/04.zip   (5 shards)
 
 This pipeline:
-  1. Downloads only the CSV metadata
-  2. Performs stratified geographic sampling to select a diverse subset
-  3. Determines which ZIP shards contain the selected images
-  4. Downloads only those shards
-  5. Provides a standard PyTorch Dataset/DataLoader interface
+  1. Downloads the CSV metadata
+  2. Picks a random subset of shards to download (controlled by max_shards)
+  3. Downloads and extracts those shards
+  4. Scans disk to find available image IDs
+  5. Filters CSV metadata to available images, then stratified-samples
+  6. Provides a standard PyTorch Dataset/DataLoader interface
 """
 
 import logging
 import os
 import zipfile
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -40,30 +40,81 @@ class OSV5MDataset(Dataset):
         seed: int = 42,
         cache_dir: str = "./data/osv5m_cache",
         extract_dir: str = "./data/osv5m_images",
+        max_shards: int | None = None,
     ):
         self.split = split
         self.subset_size = subset_size
         self.seed = seed
         self.cache_dir = cache_dir
         self.extract_dir = Path(extract_dir) / split
+        self.max_shards = max_shards
         self.country_to_label: dict[str, int] = {}
         self.label_to_country: dict[int, str] = {}
-        self._shard_to_ids: dict[int, list[str]] = defaultdict(list)
-        self._downloaded_shards: set[int] = set()
+        self._id_to_path: dict[str, Path] = {}
 
+        # Load CSV metadata (deferred sampling until after download)
         csv_path = hf_hub_download(
             repo_id=REPO_ID, filename=f"{split}.csv", repo_type="dataset", cache_dir=cache_dir
         )
-        self.metadata = self._sample(pd.read_csv(csv_path))
+        self._full_df = pd.read_csv(csv_path)
+        self.metadata = None
+
+        # Pick which shards to download
+        n_shards = TRAIN_SHARDS if split == "train" else TEST_SHARDS
+        if max_shards is not None:
+            rng = np.random.RandomState(seed)
+            self._selected_shards = sorted(
+                rng.choice(n_shards, size=min(max_shards, n_shards), replace=False).tolist()
+            )
+        else:
+            self._selected_shards = list(range(n_shards))
+
+    def download_images(self) -> None:
+        """Download selected shards, scan disk, filter CSV, and sample."""
+        os.makedirs(self.extract_dir, exist_ok=True)
+        total = len(self._selected_shards)
+
+        for i, shard_idx in enumerate(self._selected_shards, 1):
+            # Check if already extracted
+            shard_dir = self.extract_dir / f"{shard_idx:02d}"
+            if shard_dir.exists() and any(shard_dir.iterdir()):
+                print(f"[{i}/{total}] Shard {shard_idx:02d} already extracted, skipping.", flush=True)
+                continue
+
+            print(f"[{i}/{total}] Downloading shard {shard_idx:02d}...", flush=True)
+            zip_path = hf_hub_download(
+                repo_id=REPO_ID,
+                filename=f"images/{self.split}/{shard_idx:02d}.zip",
+                repo_type="dataset",
+                cache_dir=self.cache_dir,
+            )
+            print(f"[{i}/{total}] Extracting shard {shard_idx:02d}...", flush=True)
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(self.extract_dir)
+            print(f"[{i}/{total}] Shard {shard_idx:02d} done.", flush=True)
+
+        # Scan disk for all available images
+        self._id_to_path = {}
+        for shard_idx in self._selected_shards:
+            shard_dir = self.extract_dir / f"{shard_idx:02d}"
+            if not shard_dir.exists():
+                continue
+            for f in shard_dir.iterdir():
+                if f.suffix.lower() in (".jpg", ".jpeg", ".png"):
+                    self._id_to_path[f.stem] = f
+
+        available_ids = set(self._id_to_path.keys())
+        print(f"  {len(available_ids)} images on disk from {total} shard(s)", flush=True)
+
+        # Filter CSV to available images and sample
+        df = self._full_df[self._full_df["id"].astype(str).isin(available_ids)]
+        print(f"  {len(df)} matched in metadata", flush=True)
+
+        self.metadata = self._sample(df)
 
         countries = sorted(self.metadata["country"].dropna().unique())
         self.country_to_label = {c: i for i, c in enumerate(countries)}
         self.label_to_country = {i: c for c, i in self.country_to_label.items()}
-
-        n_shards = TRAIN_SHARDS if split == "train" else TEST_SHARDS
-        # shard to image_id map
-        for img_id in self.metadata["id"].astype(str):
-            self._shard_to_ids[int(img_id) % n_shards].append(img_id)
 
     def _sample(self, df: pd.DataFrame) -> pd.DataFrame:
         rng = np.random.RandomState(self.seed)
@@ -97,29 +148,12 @@ class OSV5MDataset(Dataset):
 
         return result.sample(frac=1, random_state=rng).reset_index(drop=True).head(self.subset_size)
 
-    def download_images(self) -> None:
-        os.makedirs(self.extract_dir, exist_ok=True)
-        for shard_idx in sorted(self._shard_to_ids):
-            if shard_idx in self._downloaded_shards:
-                continue
-            zip_path = hf_hub_download(
-                repo_id=REPO_ID,
-                filename=f"images/{self.split}/{shard_idx:02d}.zip",
-                repo_type="dataset",
-                cache_dir=self.cache_dir,
-            )
-            with zipfile.ZipFile(zip_path) as zf:
-                zf.extractall(self.extract_dir)
-            self._downloaded_shards.add(shard_idx)
-
     def _find_image(self, image_id: str) -> Path | None:
-        for ext in (".jpg", ".jpeg", ".png"):
-            p = self.extract_dir / f"{image_id}{ext}"
-            if p.exists():
-                return p
-        return next(self.extract_dir.rglob(f"{image_id}.*"), None)
+        return self._id_to_path.get(image_id)
 
     def __len__(self) -> int:
+        if self.metadata is None:
+            return 0
         return len(self.metadata)
 
     def __getitem__(self, idx: int) -> dict:
@@ -128,7 +162,7 @@ class OSV5MDataset(Dataset):
 
         path = self._find_image(image_id)
         if path is None:
-            raise FileNotFoundError(f"{image_id} not found — call download_images() first")
+            raise FileNotFoundError(f"{image_id} not found in extracted shards")
 
         return {
             "image": Image.open(path).convert("RGB"),
@@ -186,7 +220,9 @@ def create_dataloaders(
     extract_dir: str = "./data/osv5m_images",
 ) -> dict:
     train_ds = OSV5MDataset("train", subset_size, seed, cache_dir, extract_dir)
+    train_ds.download_images()
     test_ds = OSV5MDataset("test", max(subset_size // 10, 10_000), seed, cache_dir, extract_dir)
+    test_ds.download_images()
 
     all_countries = sorted(set(train_ds.country_to_label) | set(test_ds.country_to_label))
     mapping = {c: i for i, c in enumerate(all_countries)}
