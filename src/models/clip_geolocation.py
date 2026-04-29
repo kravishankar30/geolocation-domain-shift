@@ -25,7 +25,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import open_clip
-
+from peft import LoraConfig, get_peft_model
 
 class GeolocationCLIP(nn.Module):
     # ViT-L/14, LAION-2B — pretrained key used by open_clip
@@ -75,6 +75,9 @@ class GeolocationCLIP(nn.Module):
             # the model can be moved to the right device first.
             self._text_embeddings_built = False
 
+        if mode == "lora":
+            self.apply_lora()
+
     # ------------------------------------------------------------------
     # Mode management
     # ------------------------------------------------------------------
@@ -111,7 +114,28 @@ class GeolocationCLIP(nn.Module):
     #       model.clip = get_peft_model(model.clip, config)
     #   - Only LoRA params + self.head will have requires_grad=True
     #   - Verify with model.parameter_counts() that trainable params are << total
+    def apply_lora(self, r=16, alpha=32, dropout=0.1):
+        config = LoraConfig(
+            r=r,
+            lora_alpha=alpha,
+            lora_dropout=dropout,
+            target_modules=["out_proj", "c_fc", "c_proj"],
+            bias="none",
+        )
 
+        self.clip = get_peft_model(self.clip, config)
+
+        # Freeze all params
+        for p in self.clip.parameters():
+            p.requires_grad = False
+
+        # Unfreeze LoRA params
+        for name, p in self.clip.named_parameters():
+            p.requires_grad = "lora_" in name
+
+        # Train classifier head
+        for p in self.head.parameters():
+            p.requires_grad = True
     # ------------------------------------------------------------------
     # Zero-shot text embeddings
     # ------------------------------------------------------------------
