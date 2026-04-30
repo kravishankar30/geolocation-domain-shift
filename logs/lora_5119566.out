@@ -1,0 +1,94 @@
+---------------------------------------
+Begin Slurm Prolog: Apr-29-2026 18:11:40
+Job ID:    5119566
+User ID:   kravishankar30
+Account:   coc
+Job name:  lora-geolocation
+Partition: coc-gpu
+QOS:       coc-ice
+---------------------------------------
+
+======================================================================
+LoRA Geolocation Training
+======================================================================
+Device: cuda
+GPU: Quadro RTX 6000
+Output directory: results/lora_25k
+
+--- Loading OSV-5M subset ---
+[1/1] Shard 62 already extracted, skipping.
+  50000 images on disk from 1 shard(s)
+  50000 matched in metadata
+Dataset loading/downloading time: 43.3s
+Total available samples: 30000
+Train samples: 25000
+Test samples: 5000
+Number of countries/classes: 193
+
+--- Loading OpenCLIP ViT-L/14 with LoRA ---
+Model loading time: 11.9s
+Parameter counts:
+{'total': 434252994, 'trainable': 6636481}
+Number of trainable tensors: 218
+First trainable tensors:
+  clip.base_model.model.visual.transformer.resblocks.0.attn.out_proj.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.0.attn.out_proj.lora_B.default.weight
+  clip.base_model.model.visual.transformer.resblocks.0.mlp.c_fc.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.0.mlp.c_fc.lora_B.default.weight
+  clip.base_model.model.visual.transformer.resblocks.0.mlp.c_proj.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.0.mlp.c_proj.lora_B.default.weight
+  clip.base_model.model.visual.transformer.resblocks.1.attn.out_proj.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.1.attn.out_proj.lora_B.default.weight
+  clip.base_model.model.visual.transformer.resblocks.1.mlp.c_fc.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.1.mlp.c_fc.lora_B.default.weight
+  clip.base_model.model.visual.transformer.resblocks.1.mlp.c_proj.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.1.mlp.c_proj.lora_B.default.weight
+  clip.base_model.model.visual.transformer.resblocks.2.attn.out_proj.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.2.attn.out_proj.lora_B.default.weight
+  clip.base_model.model.visual.transformer.resblocks.2.mlp.c_fc.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.2.mlp.c_fc.lora_B.default.weight
+  clip.base_model.model.visual.transformer.resblocks.2.mlp.c_proj.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.2.mlp.c_proj.lora_B.default.weight
+  clip.base_model.model.visual.transformer.resblocks.3.attn.out_proj.lora_A.default.weight
+  clip.base_model.model.visual.transformer.resblocks.3.attn.out_proj.lora_B.default.weight
+
+--- Training LoRA ---
+Epoch 1/5 | loss=2.1613 | train_acc=0.5147 | test_top1=0.6220 | test_top5=0.8470 | time=1266.9s | lr=9.05e-05
+Epoch 2/5 | loss=1.2364 | train_acc=0.6802 | test_top1=0.6586 | test_top5=0.8754 | time=1235.4s | lr=6.55e-05
+Epoch 3/5 | loss=0.8638 | train_acc=0.7701 | test_top1=0.6700 | test_top5=0.8816 | time=1237.2s | lr=3.45e-05
+Epoch 4/5 | loss=0.6162 | train_acc=0.8405 | test_top1=0.6752 | test_top5=0.8826 | time=1238.5s | lr=9.55e-06
+Epoch 5/5 | loss=0.4868 | train_acc=0.8823 | test_top1=0.6718 | test_top5=0.8814 | time=1239.1s | lr=0.00e+00
+
+--- Final Evaluation ---
+
+======================================================================
+LORA RESULTS SUMMARY
+======================================================================
+top1_acc                  0.6718
+top5_acc                  0.8814
+top10_acc                 0.9328
+mean_class_acc            0.2911
+
+Timing:
+Data loading:       0.72 min
+Training:           116.22 min
+Final evaluation:   2.39 min
+Total run:          119.53 min
+
+Parameter counts:
+total                     434252994
+trainable                 6636481
+
+Saved outputs to: results/lora_25k
+---------------------------------------
+Begin Slurm Epilog: Apr-29-2026 20:13:55
+Job ID:        5119566
+User ID:       kravishankar30
+Account:       coc
+Job name:      lora-geolocation
+Resources:     cpu=6,gres/gpu:rtx_6000=1,mem=64G,node=1
+Rsrc Used:     cput=12:13:36,vmem=0,walltime=02:02:16,mem=31941308K,energy_used=0
+Partition:     coc-gpu
+QOS:           coc-ice
+Nodes:         atl1-1-01-005-5-0
+---------------------------------------
