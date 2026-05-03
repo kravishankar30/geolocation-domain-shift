@@ -88,6 +88,17 @@ python scripts/visualize_results.py --results_dir results/baseline
 # Outputs: results/baseline/figures/*.png
 ```
 
+```bash
+python scripts/visualize_full_finetune.py --results_dir results/full_finetune
+# Outputs: results/full_finetune/figures/*.png
+```
+
+```bash
+python scripts/run_full_finetune_domain_shift.py --full_finetune_dir results/full_finetune
+python scripts/visualize_full_finetune_domain_shift.py --results_dir results/full_finetune_domain_shift
+# Outputs: results/full_finetune_domain_shift/figures/*.png
+```
+
 ### Output structure
 
 ```
@@ -113,5 +124,30 @@ results/full_finetune/
 ├── full_finetune_per_class.json
 ├── training_log.json            # Per-epoch train/validation metrics
 ├── trainable_parameters.json
+├── figures/
+│   ├── metrics_bar.png
+│   ├── training_curve.png
+│   ├── lr_curve.png
+│   ├── per_class_top.png
+│   ├── per_class_bottom.png
+│   └── accuracy_distribution.png
 └── summary.json
+```
+
+```
+results/full_finetune_domain_shift/
+├── comparison.json
+├── summary.json
+├── gaussian_blur/
+│   ├── full_finetune_metrics.json
+│   └── full_finetune_per_class.json
+├── brightness/
+│   ├── full_finetune_metrics.json
+│   └── full_finetune_per_class.json
+├── occlusion/
+│   ├── full_finetune_metrics.json
+│   └── full_finetune_per_class.json
+└── figures/
+    ├── domain_shift_comparison.png
+    └── degradation_chart.png
 ```

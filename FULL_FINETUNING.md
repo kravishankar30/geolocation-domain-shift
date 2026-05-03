@@ -420,6 +420,35 @@ The `summary.json` file also includes:
 - dataset sizes
 - best epoch log entry
 
+To generate figures after the run:
+
+```bash
+python scripts/visualize_full_finetune.py --results_dir results/full_finetune
+```
+
+That script creates:
+
+- `figures/metrics_bar.png`
+- `figures/training_curve.png`
+- `figures/lr_curve.png`
+- `figures/per_class_top.png`
+- `figures/per_class_bottom.png`
+- `figures/accuracy_distribution.png`
+
+To run domain-shift evaluation on the saved best checkpoint:
+
+```bash
+python scripts/run_full_finetune_domain_shift.py --full_finetune_dir results/full_finetune
+python scripts/visualize_full_finetune_domain_shift.py --results_dir results/full_finetune_domain_shift
+```
+
+That evaluation:
+
+- reloads `best_checkpoint.pt`
+- rebuilds the same official test subset using the saved run config
+- evaluates the checkpoint under `gaussian_blur`, `brightness`, and `occlusion`
+- saves a `comparison.json` plus two summary figures
+
 ## Important Command-Line Arguments
 
 This section is the practical part you will likely care about most when running on a cluster.
