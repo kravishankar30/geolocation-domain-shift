@@ -10,6 +10,7 @@ This document explains the full fine-tuning implementation in this repo in enoug
 This guide covers the current implementation in:
 
 - [scripts/run_full_finetune.py](/Users/ayushbaweja/Downloads/geolocation-domain-shift/scripts/run_full_finetune.py:1)
+- [scripts/run_full_finetune.slurm](/Users/ayushbaweja/Downloads/geolocation-domain-shift/scripts/run_full_finetune.slurm:1)
 - [src/models/clip_geolocation.py](/Users/ayushbaweja/Downloads/geolocation-domain-shift/src/models/clip_geolocation.py:1)
 - [src/data/osv5m_dataset.py](/Users/ayushbaweja/Downloads/geolocation-domain-shift/src/data/osv5m_dataset.py:1)
 
@@ -50,6 +51,13 @@ The script in [scripts/run_full_finetune.py](/Users/ayushbaweja/Downloads/geoloc
 10. Reload the best checkpoint based on validation Top-1 accuracy.
 11. Evaluate on the official OSV-5M test subset.
 12. Save metrics, per-class metrics, checkpoints, and a summary JSON.
+
+The script is now also aligned with the `origin/lora` branch operationally, so it saves the same kind of run metadata that is useful on a shared GPU cluster:
+
+- system info
+- timing breakdowns
+- trainable parameter names
+- a matching Slurm launcher script
 
 ## Model Structure
 
@@ -173,6 +181,11 @@ This is required for:
 
 - early stopping
 - hyperparameter tuning without touching the final test set
+
+This is the main methodological difference from the LoRA branch:
+
+- LoRA evaluates directly on its held-out split each epoch
+- full fine-tuning keeps a separate validation split because early stopping matters more when the full backbone is trainable
 
 ## Country Label Mapping
 
@@ -397,7 +410,15 @@ Files:
 - `full_finetune_metrics.json`: final test metrics
 - `full_finetune_per_class.json`: per-class test accuracy
 - `training_log.json`: per-epoch train and validation logs
+- `trainable_parameters.json`: names of trainable tensors for auditing/debugging
 - `summary.json`: config, parameter counts, best epoch, and final metrics
+
+The `summary.json` file also includes:
+
+- system information
+- timing information
+- dataset sizes
+- best epoch log entry
 
 ## Important Command-Line Arguments
 
@@ -441,9 +462,16 @@ This does not affect training, only final evaluation cost and metric stability.
 
 Use smaller values for quick debugging. Use larger values for final reporting.
 
-#### `--max_train_shards` and `--max_test_shards`
+#### `--max_shards` and `--max_test_shards`
 
 How many OSV-5M zip shards to download.
+
+`--max_shards` now matches the LoRA branch interface and controls train shard download count.
+
+`--max_test_shards` is optional:
+
+- if omitted, it defaults to the same value as `--max_shards`
+- if set to `0`, all test shards are used
 
 Use:
 
@@ -634,7 +662,7 @@ python scripts/run_full_finetune.py \
   --test_size 25000 \
   --batch_size 64 \
   --epochs 15 \
-  --max_train_shards 0 \
+  --max_shards 0 \
   --max_test_shards 0
 ```
 
@@ -648,6 +676,12 @@ python scripts/run_full_finetune.py \
   --batch_size 8 \
   --grad_accum_steps 4 \
   --epochs 10
+```
+
+Slurm launch, using the same cluster layout pattern as the LoRA branch:
+
+```bash
+sbatch scripts/run_full_finetune.slurm
 ```
 
 ## How to Read the Training Log

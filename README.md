@@ -54,7 +54,8 @@ python scripts/run_full_finetune.py \
   --encoder_lr 1e-6 \
   --head_lr 1e-4 \
   --weight_decay 1e-4 \
-  --patience 3
+  --patience 3 \
+  --save_best
 
 # Larger cluster run
 python scripts/run_full_finetune.py \
@@ -63,7 +64,7 @@ python scripts/run_full_finetune.py \
   --test_size 25000 \
   --epochs 15 \
   --batch_size 64 \
-  --max_train_shards 0 \
+  --max_shards 0 \
   --max_test_shards 0
 ```
 
@@ -71,7 +72,14 @@ Notes:
 - The script uses the official OSV-5M `train` split for training/validation and the official `test` split for final evaluation.
 - Validation Top-1 is used for early stopping.
 - The encoder and head use separate learning rates to keep backbone updates conservative.
+- The script now mirrors the LoRA branch's cluster-facing outputs: timing metadata, system info, and `trainable_parameters.json`.
 - `--disable_amp` is available if your cluster environment has AMP compatibility issues.
+
+### Run full fine-tuning via Slurm
+
+```bash
+sbatch scripts/run_full_finetune.slurm
+```
 
 ### Generate figures
 
@@ -104,5 +112,6 @@ results/full_finetune/
 ├── full_finetune_metrics.json   # Final clean test metrics
 ├── full_finetune_per_class.json
 ├── training_log.json            # Per-epoch train/validation metrics
+├── trainable_parameters.json
 └── summary.json
 ```

@@ -13,6 +13,7 @@ import json
 import logging
 import math
 import os
+import platform
 import random
 import sys
 import time
@@ -45,14 +46,15 @@ def parse_args():
     p.add_argument("--grad_accum_steps", type=int, default=1)
     p.add_argument("--patience", type=int, default=3)
     p.add_argument("--label_smoothing", type=float, default=0.0)
-    p.add_argument("--num_workers", type=int, default=8)
+    p.add_argument("--num_workers", type=int, default=6)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--output_dir", type=str, default="results/full_finetune")
     p.add_argument("--cache_dir", type=str, default="./data/osv5m_cache")
     p.add_argument("--extract_dir", type=str, default="./data/osv5m_images")
-    p.add_argument("--max_train_shards", type=int, default=1, help="Max train shards to download (0=all)")
-    p.add_argument("--max_test_shards", type=int, default=1, help="Max test shards to download (0=all)")
+    p.add_argument("--max_shards", type=int, default=1, help="Max train shards to download (0=all)")
+    p.add_argument("--max_test_shards", type=int, default=None, help="Max test shards to download (defaults to --max_shards)")
+    p.add_argument("--save_best", action="store_true", help="Save best checkpoint by validation Top-1 accuracy.")
     p.add_argument("--disable_amp", action="store_true")
     return p.parse_args()
 
@@ -97,6 +99,30 @@ def compute_metrics(logits, labels, topk=(1, 5, 10)):
     metrics["per_class_acc"] = per_class
     metrics["mean_class_acc"] = float(np.mean(list(per_class.values()))) if per_class else 0.0
     return metrics
+
+
+def get_system_info(device):
+    info = {
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "pytorch_version": torch.__version__,
+        "device": str(device),
+        "cuda_available": torch.cuda.is_available(),
+    }
+    if torch.cuda.is_available():
+        info.update(
+            {
+                "cuda_version": torch.version.cuda,
+                "gpu_name": torch.cuda.get_device_name(0),
+                "gpu_count": torch.cuda.device_count(),
+            }
+        )
+    return info
+
+
+def save_json(obj, path: Path) -> None:
+    with open(path, "w") as f:
+        json.dump(obj, f, indent=2)
 
 
 def stratified_split_indices(metadata, train_size: int, val_size: int, seed: int) -> tuple[list[int], list[int]]:
@@ -161,8 +187,9 @@ def stratified_split_indices(metadata, train_size: int, val_size: int, seed: int
 
 
 def build_datasets(args):
-    max_train_shards = args.max_train_shards if args.max_train_shards > 0 else None
-    max_test_shards = args.max_test_shards if args.max_test_shards > 0 else None
+    max_train_shards = args.max_shards if args.max_shards > 0 else None
+    raw_test_shards = args.max_test_shards if args.max_test_shards is not None else args.max_shards
+    max_test_shards = raw_test_shards if raw_test_shards > 0 else None
 
     train_pool = OSV5MDataset(
         split="train",
@@ -290,11 +317,19 @@ def main():
     set_seed(args.seed)
     device = torch.device(args.device)
     amp_enabled = (not args.disable_amp) and device.type == "cuda"
+    system_info = get_system_info(device)
+    run_start = time.time()
+    output_dir = Path(args.output_dir)
 
     print(f"Device: {device}")
     print(f"AMP enabled: {amp_enabled}")
+    if torch.cuda.is_available():
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+    print(f"Output directory: {output_dir}")
 
+    data_start = time.time()
     train_ds, val_ds, test_ds, all_countries = build_datasets(args)
+    data_time = time.time() - data_start
     num_classes = len(all_countries)
     print(
         f"Countries: {num_classes}, Train: {len(train_ds)}, "
@@ -307,11 +342,14 @@ def main():
         class_names=all_countries,
         mode="full_finetune",
     ).to(device)
+    model_time = time.time() - run_start - data_time
     param_counts = model.parameter_counts()
     print(
         f"Parameters - total: {param_counts['total']:,}, "
         f"trainable: {param_counts['trainable']:,}"
     )
+    trainable_names = [name for name, param in model.named_parameters() if param.requires_grad]
+    save_json(trainable_names, output_dir / "trainable_parameters.json")
 
     loaders = build_loaders(
         train_ds=train_ds,
@@ -341,6 +379,7 @@ def main():
     best_epoch = 0
     epochs_without_improvement = 0
     output_dir = Path(args.output_dir)
+    train_start = time.time()
 
     print("\n--- Full fine-tuning ---")
     global_step = 0
@@ -426,47 +465,85 @@ def main():
             best_val_top1 = val_metrics["top1_acc"]
             best_epoch = epoch
             epochs_without_improvement = 0
-            save_checkpoint(
-                output_dir / "best_checkpoint.pt",
-                model,
-                optimizer,
-                scheduler,
-                scaler,
-                epoch,
-                best_val_top1,
-                args,
-            )
+            if args.save_best:
+                save_checkpoint(
+                    output_dir / "best_checkpoint.pt",
+                    model,
+                    optimizer,
+                    scheduler,
+                    scaler,
+                    epoch,
+                    best_val_top1,
+                    args,
+                )
         else:
             epochs_without_improvement += 1
             if epochs_without_improvement >= args.patience:
                 print(f"Early stopping at epoch {epoch} (best epoch: {best_epoch})")
                 break
 
+    train_time = time.time() - train_start
+
+    if not (output_dir / "best_checkpoint.pt").exists():
+        save_checkpoint(
+            output_dir / "best_checkpoint.pt",
+            model,
+            optimizer,
+            scheduler,
+            scaler,
+            best_epoch if best_epoch > 0 else len(training_log),
+            best_val_top1,
+            args,
+        )
+
     print("\n--- Loading best checkpoint for final evaluation ---")
+    eval_start = time.time()
     best_checkpoint = torch.load(output_dir / "best_checkpoint.pt", map_location=device, weights_only=False)
     model.load_state_dict(best_checkpoint["model_state_dict"])
 
     test_metrics = evaluate(model, loaders["test"], device, amp_enabled)
+    eval_time = time.time() - eval_start
+    total_time = time.time() - run_start
     per_class_test = test_metrics.pop("per_class_acc")
 
-    with open(output_dir / "training_log.json", "w") as f:
-        json.dump(training_log, f, indent=2)
-    with open(output_dir / "full_finetune_metrics.json", "w") as f:
-        json.dump(test_metrics, f, indent=2)
-    with open(output_dir / "full_finetune_per_class.json", "w") as f:
-        json.dump({str(k): v for k, v in per_class_test.items()}, f, indent=2)
+    save_json(training_log, output_dir / "training_log.json")
+    save_json(test_metrics, output_dir / "full_finetune_metrics.json")
+    save_json({str(k): v for k, v in per_class_test.items()}, output_dir / "full_finetune_per_class.json")
 
     summary = {
+        "method": "Full fine-tuning",
+        "model": "OpenCLIP ViT-L/14",
+        "pretraining": "LAION-2B",
+        "task": "country-level geolocation classification",
         "config": vars(args),
+        "system_info": system_info,
         "num_classes": num_classes,
         "num_countries": all_countries,
         "parameter_counts": param_counts,
         "best_epoch": best_epoch,
         "best_val_top1": best_val_top1,
         "test_metrics": test_metrics,
+        "dataset": {
+            "source": "OSV-5M",
+            "train_samples": len(train_ds),
+            "val_samples": len(val_ds),
+            "test_samples": len(test_ds),
+            "num_classes": num_classes,
+            "class_names": all_countries,
+            "split_seed": args.seed,
+        },
+        "timing": {
+            "data_loading_sec": data_time,
+            "model_loading_sec": model_time,
+            "training_sec": train_time,
+            "final_eval_sec": eval_time,
+            "total_run_sec": total_time,
+            "training_min": train_time / 60,
+            "total_run_min": total_time / 60,
+        },
+        "best_epoch_log": max(training_log, key=lambda x: x["val_top1"]) if training_log else None,
     }
-    with open(output_dir / "summary.json", "w") as f:
-        json.dump(summary, f, indent=2)
+    save_json(summary, output_dir / "summary.json")
 
     print("\n" + "=" * 50)
     print("FULL FINETUNE RESULTS SUMMARY")
