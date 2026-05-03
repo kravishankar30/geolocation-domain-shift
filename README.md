@@ -41,6 +41,38 @@ python scripts/run_baseline.py --train_size 10000 --test_size 2000 --epochs 10 -
 python scripts/run_baseline.py --train_size 50000 --test_size 10000 --epochs 20 --batch_size 256
 ```
 
+### Run full fine-tuning
+
+```bash
+# Validation-sized cluster smoke test
+python scripts/run_full_finetune.py \
+  --train_size 50000 \
+  --val_size 5000 \
+  --test_size 10000 \
+  --epochs 10 \
+  --batch_size 32 \
+  --encoder_lr 1e-6 \
+  --head_lr 1e-4 \
+  --weight_decay 1e-4 \
+  --patience 3
+
+# Larger cluster run
+python scripts/run_full_finetune.py \
+  --train_size 250000 \
+  --val_size 25000 \
+  --test_size 25000 \
+  --epochs 15 \
+  --batch_size 64 \
+  --max_train_shards 0 \
+  --max_test_shards 0
+```
+
+Notes:
+- The script uses the official OSV-5M `train` split for training/validation and the official `test` split for final evaluation.
+- Validation Top-1 is used for early stopping.
+- The encoder and head use separate learning rates to keep backbone updates conservative.
+- `--disable_amp` is available if your cluster environment has AMP compatibility issues.
+
 ### Generate figures
 
 ```bash
@@ -63,4 +95,14 @@ results/baseline/
     ├── per_class_top.png        # Best countries
     ├── per_class_bottom.png     # Worst countries
     └── accuracy_distribution.png
+```
+
+```
+results/full_finetune/
+├── best_checkpoint.pt           # Best checkpoint by validation Top-1
+├── last_checkpoint.pt           # Latest checkpoint
+├── full_finetune_metrics.json   # Final clean test metrics
+├── full_finetune_per_class.json
+├── training_log.json            # Per-epoch train/validation metrics
+└── summary.json
 ```
