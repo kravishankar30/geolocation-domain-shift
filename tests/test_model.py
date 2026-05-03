@@ -1,5 +1,5 @@
 """
-Tests for GeolocationCLIP — zero-shot and linear probe adaptation strategies.
+Tests for GeolocationCLIP adaptation strategies.
 Run with: uv run pytest tests/ -v
 
 open_clip is patched with a lightweight stub so the full ViT-L/14 checkpoint
@@ -183,6 +183,48 @@ class TestLinearProbe:
 
 
 # ---------------------------------------------------------------------------
+# Full fine-tuning
+# ---------------------------------------------------------------------------
+
+class TestFullFinetune:
+    @pytest.fixture(scope="class")
+    def model(self, patch_open_clip):
+        from src.models import GeolocationCLIP
+        return GeolocationCLIP(NUM_CLASSES, CLASSES, mode="full_finetune")
+
+    def test_encoder_and_head_are_trainable(self, model):
+        for name, param in model.clip.named_parameters():
+            assert param.requires_grad, f"clip.{name} should be trainable"
+        for name, param in model.head.named_parameters():
+            assert param.requires_grad, f"head.{name} should be trainable"
+
+    def test_optimizer_param_groups_split_lrs_and_weight_decay(self, model):
+        groups = model.optimizer_param_groups(
+            encoder_lr=1e-6,
+            head_lr=1e-4,
+            weight_decay=1e-2,
+        )
+        assert len(groups) == 4
+        assert groups[0]["lr"] == pytest.approx(1e-6)
+        assert groups[1]["lr"] == pytest.approx(1e-6)
+        assert groups[2]["lr"] == pytest.approx(1e-4)
+        assert groups[3]["lr"] == pytest.approx(1e-4)
+        assert groups[0]["weight_decay"] == pytest.approx(1e-2)
+        assert groups[1]["weight_decay"] == pytest.approx(0.0)
+        assert groups[2]["weight_decay"] == pytest.approx(1e-2)
+        assert groups[3]["weight_decay"] == pytest.approx(0.0)
+
+        all_grouped = set()
+        for group in groups:
+            for param in group["params"]:
+                assert id(param) not in all_grouped, "parameter duplicated across groups"
+                all_grouped.add(id(param))
+
+        expected = {id(p) for p in model.parameters() if p.requires_grad}
+        assert all_grouped == expected
+
+
+# ---------------------------------------------------------------------------
 # Mode switching
 # ---------------------------------------------------------------------------
 
@@ -194,6 +236,12 @@ class TestModes:
         assert any(p.requires_grad for p in model.clip.parameters())
         model.set_mode("linear_probe")
         assert not any(p.requires_grad for p in model.clip.parameters())
+
+    def test_optimizer_groups_reject_non_full_finetune_mode(self, patch_open_clip):
+        from src.models import GeolocationCLIP
+        model = GeolocationCLIP(NUM_CLASSES, CLASSES, mode="linear_probe")
+        with pytest.raises(ValueError):
+            model.optimizer_param_groups(1e-6, 1e-4, 1e-2)
 
     def test_invalid_mode_raises(self):
         # Unknown modes are caught at init time

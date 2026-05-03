@@ -98,12 +98,6 @@ class GeolocationCLIP(nn.Module):
         if mode == "zero_shot" and not hasattr(self, "_text_embeddings_built"):
             self._text_embeddings_built = False
 
-    # TODO (full_finetune): training loop / script not yet written.
-    #   - Unfreeze encoder via set_mode("full_finetune")
-    #   - Use a lower LR for the encoder than the head (e.g. 1e-6 vs 1e-4)
-    #   - Consider LR warmup and cosine decay scheduler
-    #   - Watch for overfitting — encoder has ~300M params
-
     # TODO (lora): LoRA adapter injection not yet implemented.
     #   - Add peft to pyproject.toml dependencies
     #   - After set_mode("lora"), wrap self.clip:
@@ -189,3 +183,43 @@ class GeolocationCLIP(nn.Module):
         total = sum(p.numel() for p in self.parameters())
         trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
         return {"total": total, "trainable": trainable}
+
+    def optimizer_param_groups(
+        self,
+        encoder_lr: float,
+        head_lr: float,
+        weight_decay: float,
+    ) -> list[dict]:
+        """Build AdamW-style parameter groups for full fine-tuning.
+
+        Biases and 1D parameters (for example LayerNorm scales) are excluded from
+        weight decay. The encoder and classification head receive separate learning
+        rates so the pretrained backbone can be updated more conservatively.
+        """
+        if self.mode != "full_finetune":
+            raise ValueError(
+                "optimizer_param_groups() is intended for full_finetune mode; "
+                f"current mode is {self.mode!r}"
+            )
+
+        def split_decay(module: nn.Module) -> tuple[list[nn.Parameter], list[nn.Parameter]]:
+            decay_params: list[nn.Parameter] = []
+            no_decay_params: list[nn.Parameter] = []
+            for name, param in module.named_parameters():
+                if not param.requires_grad:
+                    continue
+                if param.ndim <= 1 or name.endswith("bias"):
+                    no_decay_params.append(param)
+                else:
+                    decay_params.append(param)
+            return decay_params, no_decay_params
+
+        encoder_decay, encoder_no_decay = split_decay(self.clip)
+        head_decay, head_no_decay = split_decay(self.head)
+
+        return [
+            {"params": encoder_decay, "lr": encoder_lr, "weight_decay": weight_decay},
+            {"params": encoder_no_decay, "lr": encoder_lr, "weight_decay": 0.0},
+            {"params": head_decay, "lr": head_lr, "weight_decay": weight_decay},
+            {"params": head_no_decay, "lr": head_lr, "weight_decay": 0.0},
+        ]
