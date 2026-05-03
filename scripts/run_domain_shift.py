@@ -35,10 +35,26 @@ from src.models.clip_geolocation import GeolocationCLIP
 # Corruption transforms (applied to PIL images before CLIP preprocess)
 # ------------------------------------------------------------------
 
+def _identity(img):
+    return img
+
+
+def _gaussian_blur(img):
+    return img.filter(ImageFilter.GaussianBlur(radius=5))
+
+
+def _brightness(img):
+    return ImageEnhance.Brightness(img).enhance(2.5)
+
+
+def _occlusion(img):
+    return _apply_occlusion(img, fraction=0.3, seed=42)
+
+
 CORRUPTIONS = {
-    "gaussian_blur": lambda img: img.filter(ImageFilter.GaussianBlur(radius=5)),
-    "brightness": lambda img: ImageEnhance.Brightness(img).enhance(2.5),
-    "occlusion": lambda img: _apply_occlusion(img, fraction=0.3, seed=42),
+    "gaussian_blur": _gaussian_blur,
+    "brightness": _brightness,
+    "occlusion": _occlusion,
 }
 
 
@@ -295,7 +311,7 @@ def run_lora_mode(args, device):
 
     all_results = {}
 
-    clean_ds = _CorruptedDataset(test_ds, model.preprocess, lambda x: x)
+    clean_ds = _CorruptedDataset(test_ds, model.preprocess, _identity)
     clean_metrics = evaluate_model_logits(clean_ds, model, device, args.batch_size)
     clean_dir = Path(args.output_dir) / "clean"
     os.makedirs(clean_dir, exist_ok=True)
