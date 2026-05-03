@@ -23,24 +23,31 @@ def load_json(path):
 
 
 def plot_comparison(results, out_dir):
-    """Grouped bar chart: all conditions, zero-shot and linear probe side by side."""
+    """Grouped bar chart for all available methods in comparison.json."""
     conditions = list(results.keys())
+    methods = sorted({m for cond in results.values() for m in cond.keys()})
+    if not methods:
+        raise ValueError("No methods found in results.")
     metrics = ["top1_acc", "top5_acc"]
     metric_labels = ["Top-1", "Top-5"]
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    colors = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3"]
 
     for ax, (metric, mlabel) in zip(axes, zip(metrics, metric_labels)):
-        zs_vals = [results[c]["zero_shot"].get(metric, 0) for c in conditions]
-        lp_vals = [results[c]["linear_probe"].get(metric, 0) for c in conditions]
-
         x = np.arange(len(conditions))
-        w = 0.35
+        w = 0.8 / len(methods)
+        offsets = np.linspace(-0.4 + w / 2, 0.4 - w / 2, len(methods))
 
-        bars1 = ax.bar(x - w / 2, zs_vals, w, label="Zero-Shot", color="#4C72B0")
-        bars2 = ax.bar(x + w / 2, lp_vals, w, label="Linear Probe", color="#DD8452")
-
-        for bars in [bars1, bars2]:
+        for idx, method in enumerate(methods):
+            vals = [results[c].get(method, {}).get(metric, 0) for c in conditions]
+            bars = ax.bar(
+                x + offsets[idx],
+                vals,
+                w,
+                label=method.replace("_", " ").title(),
+                color=colors[idx % len(colors)],
+            )
             for bar in bars:
                 h = bar.get_height()
                 ax.annotate(f"{h:.3f}", xy=(bar.get_x() + bar.get_width() / 2, h),
@@ -51,7 +58,10 @@ def plot_comparison(results, out_dir):
         ax.set_xticks(x)
         ax.set_xticklabels(conditions, rotation=15, ha="right")
         ax.legend()
-        ax.set_ylim(0, min(1.0, max(max(zs_vals), max(lp_vals)) * 1.3))
+        max_y = max(
+            [results[c].get(method, {}).get(metric, 0) for c in conditions for method in methods] + [0.01]
+        )
+        ax.set_ylim(0, min(1.0, max_y * 1.3))
         ax.grid(axis="y", alpha=0.3)
 
     fig.tight_layout()
@@ -66,21 +76,26 @@ def plot_degradation(results, out_dir):
     if not conditions:
         return
 
-    clean_zs = results["clean"]["zero_shot"].get("top1_acc", 0)
-    clean_lp = results["clean"]["linear_probe"].get("top1_acc", 0)
+    methods = sorted({m for cond in results.values() for m in cond.keys()})
+    if not methods:
+        return
 
     fig, ax = plt.subplots(figsize=(10, 5))
     x = np.arange(len(conditions))
-    w = 0.35
+    w = 0.8 / len(methods)
+    offsets = np.linspace(-0.4 + w / 2, 0.4 - w / 2, len(methods))
+    colors = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3"]
 
-    # Compute relative degradation (percentage points dropped)
-    zs_drops = [clean_zs - results[c]["zero_shot"].get("top1_acc", 0) for c in conditions]
-    lp_drops = [clean_lp - results[c]["linear_probe"].get("top1_acc", 0) for c in conditions]
-
-    bars1 = ax.bar(x - w / 2, zs_drops, w, label="Zero-Shot", color="#4C72B0")
-    bars2 = ax.bar(x + w / 2, lp_drops, w, label="Linear Probe", color="#DD8452")
-
-    for bars in [bars1, bars2]:
+    for idx, method in enumerate(methods):
+        clean_top1 = results.get("clean", {}).get(method, {}).get("top1_acc", 0)
+        drops = [clean_top1 - results[c].get(method, {}).get("top1_acc", 0) for c in conditions]
+        bars = ax.bar(
+            x + offsets[idx],
+            drops,
+            w,
+            label=method.replace("_", " ").title(),
+            color=colors[idx % len(colors)],
+        )
         for bar in bars:
             h = bar.get_height()
             ax.annotate(f"{h:.3f}", xy=(bar.get_x() + bar.get_width() / 2, h),

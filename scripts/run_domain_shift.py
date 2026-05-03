@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Evaluate domain shift robustness by corrupting test images.
+"""Evaluate domain-shift robustness on clean/corrupted test images.
 
-Trains linear probe on clean data, then evaluates zero-shot and linear probe
-on corrupted test sets. Reuses cached clean train embeddings from run_baseline.py.
+Supported modes:
+1) baseline: evaluate zero-shot + linear-probe.
+2) lora: evaluate a trained LoRA checkpoint directly.
 
 Usage:
-    python scripts/run_domain_shift.py --baseline_dir results/baseline
-
-Corruptions: gaussian_blur, brightness, occlusion
-Results saved to results/domain_shift/
+    python scripts/run_domain_shift.py --eval_mode baseline --baseline_dir results/baseline
+    python scripts/run_domain_shift.py --eval_mode lora --lora_dir results/lora
 """
 
 import argparse
@@ -169,7 +168,10 @@ def evaluate_linear_probe(head, embeddings, labels, device):
 
 def parse_args():
     p = argparse.ArgumentParser()
+    p.add_argument("--eval_mode", type=str, default="baseline", choices=["baseline", "lora"])
     p.add_argument("--baseline_dir", type=str, default="results/baseline")
+    p.add_argument("--lora_dir", type=str, default="results/lora")
+    p.add_argument("--lora_checkpoint", type=str, default="results/lora/lora_best_checkpoint.pt")
     p.add_argument("--output_dir", type=str, default="results/domain_shift")
     p.add_argument("--train_size", type=int, default=10_000)
     p.add_argument("--test_size", type=int, default=2_000)
@@ -184,110 +186,179 @@ def parse_args():
     return p.parse_args()
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    args = parse_args()
-    os.makedirs(args.output_dir, exist_ok=True)
-    device = torch.device(args.device)
-    baseline_dir = Path(args.baseline_dir)
+@torch.no_grad()
+def evaluate_model_logits(dataset, model, device, batch_size=256):
+    """Evaluate model outputs directly (used for LoRA mode)."""
+    model.eval()
+    all_logits, all_labels = [], []
+    loader = DataLoader(dataset, batch_size=batch_size, num_workers=8, pin_memory=True)
+    for images, labels in tqdm(loader, desc="Evaluating model"):
+        images = images.to(device)
+        logits = model(images).cpu()
+        all_logits.append(logits)
+        all_labels.append(labels)
+    logits = torch.cat(all_logits)
+    labels = torch.cat(all_labels)
+    return compute_metrics(logits, labels)
 
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
 
-    # Load clean train embeddings from baseline run
-    train_data = torch.load(baseline_dir / "embeddings" / "train_embs.pt", weights_only=True)
-    train_embs, train_labels = train_data["embs"], train_data["labels"]
-    print(f"Loaded clean train embeddings: {train_embs.shape}")
+def _save_metrics(metrics, out_path):
+    metrics = dict(metrics)
+    metrics.pop("per_class_acc", None)
+    json.dump(metrics, open(out_path, "w"), indent=2)
+    return metrics
 
-    # Load baseline summary for country list and config
-    summary = json.load(open(baseline_dir / "summary.json"))
-    all_countries = summary["num_countries"]
-    num_classes = len(all_countries)
 
-    # Rebuild test dataset (need actual images for corruption)
+def _build_test_split(args):
     print("\n--- Rebuilding test dataset ---")
     max_shards = args.max_shards if args.max_shards > 0 else None
     total_size = args.train_size + args.test_size
     full_ds = OSV5MDataset("train", total_size, args.seed, args.cache_dir, args.extract_dir, max_shards=max_shards)
     full_ds.download_images()
-
-    # Reproduce the same train/test split
     n = len(full_ds)
     rng = np.random.RandomState(args.seed)
     indices = rng.permutation(n)
     n_test = min(args.test_size, n // 5)
     test_idx = indices[:n_test]
-    test_ds = torch.utils.data.Subset(full_ds, test_idx)
+    train_idx = indices[n_test:n_test + args.train_size]
+    return full_ds, torch.utils.data.Subset(full_ds, train_idx), torch.utils.data.Subset(full_ds, test_idx)
+
+
+def run_baseline_mode(args, device):
+    baseline_dir = Path(args.baseline_dir)
+
+    train_data = torch.load(baseline_dir / "embeddings" / "train_embs.pt", weights_only=True)
+    train_embs, train_labels = train_data["embs"], train_data["labels"]
+    print(f"Loaded clean train embeddings: {train_embs.shape}")
+
+    summary = json.load(open(baseline_dir / "summary.json"))
+    all_countries = summary["num_countries"]
+    num_classes = len(all_countries)
+
+    _, _, test_ds = _build_test_split(args)
     print(f"Test set: {len(test_ds)} images")
 
-    # Load model
-    print("\n--- Loading CLIP ViT-L/14 ---")
-    model = GeolocationCLIP(num_classes=num_classes, class_names=all_countries, mode="zero_shot")
-    model.to(device)
+    model = GeolocationCLIP(num_classes=num_classes, class_names=all_countries, mode="zero_shot").to(device)
     model.eval()
 
-    # Train linear probe on clean embeddings
     print("\n--- Training linear probe on clean data ---")
     head = train_linear_probe(
         train_embs, train_labels, num_classes,
         epochs=args.epochs, lr=args.lr, batch_size=args.batch_size, device=str(device),
     )
 
-    # Load clean test results from baseline
     clean_zs = json.load(open(baseline_dir / "zero_shot_metrics.json"))
     clean_lp = json.load(open(baseline_dir / "linear_probe_metrics.json"))
+    all_results = {"clean": {"zero_shot": clean_zs, "linear_probe": clean_lp}}
 
-    # Collect all results (clean + corrupted)
-    all_results = {
-        "clean": {"zero_shot": clean_zs, "linear_probe": clean_lp},
-    }
-
-    # Run each corruption
     for corruption_name, corruption_fn in CORRUPTIONS.items():
-        print(f"\n{'='*50}")
-        print(f"Corruption: {corruption_name}")
-        print(f"{'='*50}")
-
+        print(f"\n{'='*50}\nCorruption: {corruption_name}\n{'='*50}")
         t0 = time.time()
-
-        # Extract corrupted test embeddings
         corrupted_ds = _CorruptedDataset(test_ds, model.preprocess, corruption_fn)
         corrupted_embs, corrupted_labels = extract_embeddings(corrupted_ds, model, device, args.batch_size)
         print(f"Extraction took {time.time() - t0:.1f}s")
 
-        # Zero-shot on corrupted
         zs_metrics = evaluate_zero_shot(corrupted_embs, corrupted_labels, model, device)
-        print(f"  Zero-shot top-1: {zs_metrics['top1_acc']:.4f}, top-5: {zs_metrics.get('top5_acc', 'N/A')}")
-
-        # Linear probe on corrupted (same head trained on clean)
         lp_metrics = evaluate_linear_probe(head, corrupted_embs, corrupted_labels, device)
-        print(f"  Linear probe top-1: {lp_metrics['top1_acc']:.4f}, top-5: {lp_metrics.get('top5_acc', 'N/A')}")
 
-        # Save per-corruption results
         corr_dir = Path(args.output_dir) / corruption_name
         os.makedirs(corr_dir, exist_ok=True)
-
-        zs_pc = zs_metrics.pop("per_class_acc")
-        lp_pc = lp_metrics.pop("per_class_acc")
-        json.dump(zs_metrics, open(corr_dir / "zero_shot_metrics.json", "w"), indent=2)
-        json.dump(lp_metrics, open(corr_dir / "linear_probe_metrics.json", "w"), indent=2)
-
+        zs_metrics = _save_metrics(zs_metrics, corr_dir / "zero_shot_metrics.json")
+        lp_metrics = _save_metrics(lp_metrics, corr_dir / "linear_probe_metrics.json")
         all_results[corruption_name] = {"zero_shot": zs_metrics, "linear_probe": lp_metrics}
 
-    # Save combined comparison
+    return all_results
+
+
+def run_lora_mode(args, device):
+    lora_dir = Path(args.lora_dir)
+    summary = json.load(open(lora_dir / "summary.json"))
+    class_names = summary["dataset"]["class_names"]
+    num_classes = summary["dataset"]["num_classes"]
+
+    # Reuse the same split configuration used during LoRA training by default.
+    if "config" in summary:
+        args.train_size = int(summary["config"].get("train_size", args.train_size))
+        args.test_size = int(summary["config"].get("test_size", args.test_size))
+        args.seed = int(summary["config"].get("seed", args.seed))
+        args.max_shards = int(summary["config"].get("max_shards", args.max_shards))
+
+    _, _, test_ds = _build_test_split(args)
+    print(f"Test set: {len(test_ds)} images")
+
+    ckpt_path = Path(args.lora_checkpoint) if args.lora_checkpoint else (lora_dir / "lora_checkpoint.pt")
+    print(f"\n--- Loading LoRA checkpoint: {ckpt_path} ---")
+    model = GeolocationCLIP(num_classes=num_classes, class_names=class_names, mode="lora").to(device)
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+    model.load_state_dict(ckpt["model_state_dict"])
+    model.eval()
+
+    all_results = {}
+
+    clean_ds = _CorruptedDataset(test_ds, model.preprocess, lambda x: x)
+    clean_metrics = evaluate_model_logits(clean_ds, model, device, args.batch_size)
+    clean_dir = Path(args.output_dir) / "clean"
+    os.makedirs(clean_dir, exist_ok=True)
+    clean_metrics = _save_metrics(clean_metrics, clean_dir / "lora_metrics.json")
+    all_results["clean"] = {"lora": clean_metrics}
+
+    for corruption_name, corruption_fn in CORRUPTIONS.items():
+        print(f"\n{'='*50}\nCorruption: {corruption_name}\n{'='*50}")
+        corrupted_ds = _CorruptedDataset(test_ds, model.preprocess, corruption_fn)
+        metrics = evaluate_model_logits(corrupted_ds, model, device, args.batch_size)
+        corr_dir = Path(args.output_dir) / corruption_name
+        os.makedirs(corr_dir, exist_ok=True)
+        metrics = _save_metrics(metrics, corr_dir / "lora_metrics.json")
+        all_results[corruption_name] = {"lora": metrics}
+
+    return all_results
+
+
+def print_summary(all_results):
+    methods = sorted({m for cond in all_results.values() for m in cond.keys()})
+    print(f"\n{'='*70}\nDOMAIN SHIFT RESULTS SUMMARY\n{'='*70}")
+    header = f"{'Condition':<20}" + "".join([f"{m[:8]} T1".rjust(12) for m in methods])
+    print(header)
+    print("-" * len(header))
+    for condition, payload in all_results.items():
+        row = f"{condition:<20}"
+        for m in methods:
+            row += f"{payload.get(m, {}).get('top1_acc', 0):>12.4f}"
+        print(row)
+
+
+def merge_with_existing_results(output_dir, new_results):
+    """Merge new method results into existing comparison.json without deleting others."""
+    comparison_path = Path(output_dir) / "comparison.json"
+    if comparison_path.exists():
+        existing = json.load(open(comparison_path))
+    else:
+        existing = {}
+
+    merged = dict(existing)
+    for condition, payload in new_results.items():
+        if condition not in merged:
+            merged[condition] = {}
+        merged[condition].update(payload)
+    return merged
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    args = parse_args()
+    os.makedirs(args.output_dir, exist_ok=True)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    device = torch.device(args.device)
+
+    if args.eval_mode == "baseline":
+        new_results = run_baseline_mode(args, device)
+    else:
+        new_results = run_lora_mode(args, device)
+
+    all_results = merge_with_existing_results(args.output_dir, new_results)
     json.dump(all_results, open(Path(args.output_dir) / "comparison.json", "w"), indent=2)
-
-    # Print summary table
-    print(f"\n{'='*70}")
-    print("DOMAIN SHIFT RESULTS SUMMARY")
-    print(f"{'='*70}")
-    print(f"{'Condition':<20} {'ZS Top-1':>10} {'ZS Top-5':>10} {'LP Top-1':>10} {'LP Top-5':>10}")
-    print("-" * 70)
-    for name, res in all_results.items():
-        zs, lp = res["zero_shot"], res["linear_probe"]
-        print(f"{name:<20} {zs.get('top1_acc', 0):>10.4f} {zs.get('top5_acc', 0):>10.4f} "
-              f"{lp.get('top1_acc', 0):>10.4f} {lp.get('top5_acc', 0):>10.4f}")
-
+    print_summary(all_results)
     print(f"\nResults saved to {args.output_dir}/")
 
 
