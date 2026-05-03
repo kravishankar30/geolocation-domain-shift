@@ -139,46 +139,85 @@ def stratified_split_indices(metadata, train_size: int, val_size: int, seed: int
 
     rng = np.random.RandomState(seed)
     grouped = metadata.groupby("country").indices
-    target_total = train_size + val_size
-    train_idx: list[int] = []
-    val_idx: list[int] = []
-    leftovers: list[int] = []
+    total_examples = len(metadata)
+    if val_size == 0:
+        all_indices = np.arange(total_examples, dtype=int)
+        rng.shuffle(all_indices)
+        return all_indices[:train_size].tolist(), []
 
+    # Allocate validation quotas proportionally while guaranteeing that any class
+    # contributing validation examples still leaves at least one training example.
+    per_country = []
+    max_val_capacity = 0
     for country in sorted(grouped):
         idxs = np.array(grouped[country], dtype=int)
         rng.shuffle(idxs)
-        target = min(len(idxs), int(round(target_total * len(idxs) / len(metadata))))
-        if target == 0 and len(idxs) > 0:
-            target = 1
+        count = len(idxs)
+        max_val = max(0, count - 1)
+        raw_quota = (val_size * count) / total_examples
+        base_quota = min(max_val, int(np.floor(raw_quota)))
+        per_country.append(
+            {
+                "country": country,
+                "indices": idxs,
+                "count": count,
+                "max_val": max_val,
+                "val_quota": base_quota,
+                "remainder": raw_quota - np.floor(raw_quota),
+            }
+        )
+        max_val_capacity += max_val
 
-        chosen = idxs[:target]
-        if len(chosen) == 0:
-            continue
+    if max_val_capacity < val_size:
+        raise RuntimeError(
+            "Unable to create the requested validation split because too many "
+            "classes have only one example. Reduce val_size or increase shard coverage."
+        )
 
-        val_target = 0
-        if val_size > 0:
-            val_target = int(round(val_size * len(chosen) / target_total))
-            if len(chosen) >= 2 and val_target == 0:
-                val_target = 1
-            val_target = min(val_target, len(chosen) - 1) if len(chosen) > 1 else 0
+    current_val = sum(entry["val_quota"] for entry in per_country)
+    if current_val < val_size:
+        candidates = [entry for entry in per_country if entry["val_quota"] < entry["max_val"]]
+        candidates.sort(
+            key=lambda entry: (
+                -entry["remainder"],
+                -entry["count"],
+                entry["country"],
+            )
+        )
+        idx = 0
+        while current_val < val_size:
+            entry = candidates[idx % len(candidates)]
+            if entry["val_quota"] < entry["max_val"]:
+                entry["val_quota"] += 1
+                current_val += 1
+            idx += 1
 
-        val_idx.extend(chosen[:val_target].tolist())
-        train_idx.extend(chosen[val_target:].tolist())
-        leftovers.extend(idxs[target:].tolist())
+    elif current_val > val_size:
+        candidates = [entry for entry in per_country if entry["val_quota"] > 0]
+        candidates.sort(
+            key=lambda entry: (
+                entry["remainder"],
+                entry["count"],
+                entry["country"],
+            )
+        )
+        idx = 0
+        while current_val > val_size:
+            entry = candidates[idx % len(candidates)]
+            if entry["val_quota"] > 0:
+                entry["val_quota"] -= 1
+                current_val -= 1
+            idx += 1
 
-    rng.shuffle(leftovers)
+    train_idx: list[int] = []
+    val_idx: list[int] = []
+    for entry in per_country:
+        val_quota = entry["val_quota"]
+        idxs = entry["indices"]
+        val_idx.extend(idxs[:val_quota].tolist())
+        train_idx.extend(idxs[val_quota:].tolist())
 
-    def top_up(pool: list[int], target_size: int, dest: list[int]) -> list[int]:
-        need = target_size - len(dest)
-        if need <= 0:
-            return pool
-        dest.extend(pool[:need])
-        return pool[need:]
-
-    leftovers = top_up(leftovers, train_size, train_idx)
-    leftovers = top_up(leftovers, val_size, val_idx)
-
-    if len(train_idx) < train_size or len(val_idx) < val_size:
+    if len(val_idx) != val_size or len(train_idx) < train_size:
         raise RuntimeError("Unable to create the requested train/val split from sampled metadata.")
 
     rng.shuffle(train_idx)
