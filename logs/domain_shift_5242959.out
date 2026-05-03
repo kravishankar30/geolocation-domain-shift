@@ -1,0 +1,53 @@
+---------------------------------------
+Begin Slurm Prolog: May-02-2026 22:24:29
+Job ID:    5242959
+User ID:   kravishankar30
+Account:   coc
+Job name:  domain-shift
+Partition: coc-gpu
+QOS:       coc-ice
+---------------------------------------
+
+--- Rebuilding test dataset ---
+[1/1] Shard 62 already extracted, skipping.
+  50000 images on disk from 1 shard(s)
+  50000 matched in metadata
+Test set: 10000 images
+
+--- Loading LoRA checkpoint: results/lora/lora_best_checkpoint.pt ---
+
+==================================================
+Corruption: gaussian_blur
+==================================================
+
+==================================================
+Corruption: brightness
+==================================================
+
+==================================================
+Corruption: occlusion
+==================================================
+
+======================================================================
+DOMAIN SHIFT RESULTS SUMMARY
+======================================================================
+Condition            linear_p T1     lora T1 zero_sho T1
+--------------------------------------------------------
+clean                     0.6056      0.6806      0.0874
+gaussian_blur             0.4816      0.4720      0.0604
+brightness                0.4933      0.5278      0.0614
+occlusion                 0.5315      0.5739      0.0536
+
+Results saved to results/domain_shift/
+---------------------------------------
+Begin Slurm Epilog: May-02-2026 22:45:20
+Job ID:        5242959
+User ID:       kravishankar30
+Account:       coc
+Job name:      domain-shift
+Resources:     cpu=6,gres/gpu:v100=1,mem=64G,node=1
+Rsrc Used:     cput=02:05:12,vmem=0,walltime=00:20:52,mem=39421824K,energy_used=0
+Partition:     coc-gpu
+QOS:           coc-ice
+Nodes:         atl1-1-01-002-6-0
+---------------------------------------

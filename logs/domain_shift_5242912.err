@@ -1,0 +1,75 @@
+INFO: HTTP Request: HEAD https://huggingface.co/datasets/osv5m/osv5m/resolve/main/train.csv "HTTP/1.1 302 Found"
+/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/src/data/osv5m_dataset.py:59: DtypeWarning: Columns (0: sub-region, 1: unique_sub-region) have mixed types. Specify dtype option on import or set low_memory=False.
+  self._full_df = pd.read_csv(csv_path)
+INFO: Parsing model identifier. Schema: None, Identifier: ViT-L-14
+INFO: Loaded built-in ViT-L-14 model config.
+INFO: HTTP Request: HEAD https://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_model.safetensors "HTTP/1.1 404 Not Found"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING: Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+INFO: HTTP Request: HEAD https://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.bin "HTTP/1.1 302 Found"
+INFO: Instantiating model architecture: CLIP
+INFO: Loading full pretrained weights from: /home/hice1/kravishankar30/.cache/huggingface/hub/models--laion--CLIP-ViT-L-14-laion2B-s32B-b82K/snapshots/1627032197142fbe2a7cfec626f4ced3ae60d07a/open_clip_pytorch_model.bin
+INFO: Final image preprocessing configuration set: {'size': (224, 224), 'mode': 'RGB', 'mean': (0.5, 0.5, 0.5), 'std': (0.5, 0.5, 0.5), 'interpolation': 'bicubic', 'resize_mode': 'shortest', 'fill_color': 0}
+INFO: Model ViT-L-14 creation process complete.
+INFO: Parsing tokenizer identifier. Schema: None, Identifier: ViT-L-14
+INFO: Attempting to load config from built-in: ViT-L-14
+INFO: Using default SimpleTokenizer.
+/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/.venv/lib/python3.14/site-packages/torch/utils/data/dataloader.py:424: UserWarning: This DataLoader will create 8 worker processes in total. Our suggested max number of worker in current system is 6, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  self.check_worker_number_rationality()
+Evaluating model:   0%|          | 0/79 [00:00<?, ?it/s]/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/.venv/lib/python3.14/site-packages/torch/utils/data/dataloader.py:432: UserWarning: This DataLoader will create 8 worker processes in total. Our suggested max number of worker in current system is 6, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  self.check_worker_number_rationality()
+/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/.venv/lib/python3.14/site-packages/torch/utils/data/dataloader.py:433: UserWarning: Got pickle error when attempting to start a worker Process. This might be because the worker Process arguments are not picklable. Python 3.14+ changed the multiprocessing start method in non-Mac POSIX platforms to 'forkserver', which requires the worker Process arguments to be picklable. You can also try multiprocessing.set_start_method('fork').
+  return _MultiProcessingDataLoaderIter(self)
+Evaluating model:   0%|          | 0/79 [00:03<?, ?it/s]
+Traceback (most recent call last):
+  File "/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/scripts/run_domain_shift.py", line 366, in <module>
+    main()
+    ~~~~^^
+  File "/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/scripts/run_domain_shift.py", line 357, in main
+    new_results = run_lora_mode(args, device)
+  File "/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/scripts/run_domain_shift.py", line 299, in run_lora_mode
+    clean_metrics = evaluate_model_logits(clean_ds, model, device, args.batch_size)
+  File "/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/.venv/lib/python3.14/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/scripts/run_domain_shift.py", line 195, in evaluate_model_logits
+    for images, labels in tqdm(loader, desc="Evaluating model"):
+                          ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/.venv/lib/python3.14/site-packages/tqdm/std.py", line 1181, in __iter__
+    for obj in iterable:
+               ^^^^^^^^
+  File "/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/.venv/lib/python3.14/site-packages/torch/utils/data/dataloader.py", line 500, in __iter__
+    return self._get_iterator()
+           ~~~~~~~~~~~~~~~~~~^^
+  File "/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/.venv/lib/python3.14/site-packages/torch/utils/data/dataloader.py", line 433, in _get_iterator
+    return _MultiProcessingDataLoaderIter(self)
+  File "/storage/ice1/4/9/kravishankar30/geolocation-domain-shift/.venv/lib/python3.14/site-packages/torch/utils/data/dataloader.py", line 1192, in __init__
+    w.start()
+    ~~~~~~~^^
+  File "/home/hice1/kravishankar30/.local/share/uv/python/cpython-3.14.4-linux-x86_64-gnu/lib/python3.14/multiprocessing/process.py", line 121, in start
+    self._popen = self._Popen(self)
+                  ~~~~~~~~~~~^^^^^^
+  File "/home/hice1/kravishankar30/.local/share/uv/python/cpython-3.14.4-linux-x86_64-gnu/lib/python3.14/multiprocessing/context.py", line 230, in _Popen
+    return _default_context.get_context().Process._Popen(process_obj)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/home/hice1/kravishankar30/.local/share/uv/python/cpython-3.14.4-linux-x86_64-gnu/lib/python3.14/multiprocessing/context.py", line 306, in _Popen
+    return Popen(process_obj)
+  File "/home/hice1/kravishankar30/.local/share/uv/python/cpython-3.14.4-linux-x86_64-gnu/lib/python3.14/multiprocessing/popen_forkserver.py", line 35, in __init__
+    super().__init__(process_obj)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/home/hice1/kravishankar30/.local/share/uv/python/cpython-3.14.4-linux-x86_64-gnu/lib/python3.14/multiprocessing/popen_fork.py", line 20, in __init__
+    self._launch(process_obj)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/home/hice1/kravishankar30/.local/share/uv/python/cpython-3.14.4-linux-x86_64-gnu/lib/python3.14/multiprocessing/popen_forkserver.py", line 47, in _launch
+    reduction.dump(process_obj, buf)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/home/hice1/kravishankar30/.local/share/uv/python/cpython-3.14.4-linux-x86_64-gnu/lib/python3.14/multiprocessing/reduction.py", line 60, in dump
+    ForkingPickler(file, protocol).dump(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+_pickle.PicklingError: Can't pickle local object <function run_lora_mode.<locals>.<lambda> at 0x1553f06dada0>
+when serializing dict item 'corruption_fn'
+when serializing _CorruptedDataset state
+when serializing _CorruptedDataset object
+when serializing tuple item 1
+when serializing dict item '_args'
+when serializing multiprocessing.context.Process state
+when serializing multiprocessing.context.Process object

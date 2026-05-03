@@ -1,0 +1,29 @@
+---------------------------------------
+Begin Slurm Prolog: May-02-2026 22:15:10
+Job ID:    5242912
+User ID:   kravishankar30
+Account:   coc
+Job name:  domain-shift
+Partition: ice-bw-gpu
+QOS:       coc-ice
+---------------------------------------
+
+--- Rebuilding test dataset ---
+[1/1] Shard 62 already extracted, skipping.
+  50000 images on disk from 1 shard(s)
+  50000 matched in metadata
+Test set: 10000 images
+
+--- Loading LoRA checkpoint: results/lora/lora_best_checkpoint.pt ---
+---------------------------------------
+Begin Slurm Epilog: May-02-2026 22:18:17
+Job ID:        5242912
+User ID:       kravishankar30
+Account:       coc
+Job name:      domain-shift
+Resources:     cpu=6,gres/gpu:rtx_pro_6000_blackwell=1,mem=64G,node=1
+Rsrc Used:     cput=00:18:42,vmem=0,walltime=00:03:07,mem=12842848K,energy_used=0
+Partition:     ice-bw-gpu
+QOS:           coc-ice
+Nodes:         atl1-1-01-009-33-0
+---------------------------------------
