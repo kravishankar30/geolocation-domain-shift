@@ -1,0 +1,161 @@
+{
+  "notes": [
+    "Zero-shot, linear probe, and LoRA use the pooled random split from OSV-5M train.",
+    "Full fine-tuning uses the official train/val/test split.",
+    "Only split-matched comparisons should be interpreted quantitatively.",
+    "LoRA vs full fine-tuning domain-shift plots should emphasize retention/drop trends over absolute score ranking."
+  ],
+  "clean_metrics": {
+    "pooled_split": {
+      "zero_shot": {
+        "top1_acc": 0.08739999681711197,
+        "top5_acc": 0.20440000295639038,
+        "top10_acc": 0.2824999988079071,
+        "mean_class_acc": 0.05443265860634191
+      },
+      "linear_probe": {
+        "top1_acc": 0.6055999994277954,
+        "top5_acc": 0.8392999768257141,
+        "top10_acc": 0.9097999930381775,
+        "mean_class_acc": 0.15617574944027832
+      },
+      "lora": {
+        "top1_acc": 0.7121000289916992,
+        "top5_acc": 0.8974999785423279,
+        "top10_acc": 0.9469000101089478,
+        "mean_class_acc": 0.30883392914221053
+      }
+    },
+    "official_split": {
+      "full_finetune": {
+        "top1_acc": 0.48089998960494995,
+        "top5_acc": 0.724399983882904,
+        "top10_acc": 0.8090999722480774,
+        "mean_class_acc": 0.23466695901872806,
+        "loss": 2.447472840499878
+      }
+    }
+  },
+  "domain_shift_sources": {
+    "pooled_split": {
+      "clean": {
+        "zero_shot": {
+          "top1_acc": 0.08739999681711197,
+          "top5_acc": 0.20440000295639038,
+          "top10_acc": 0.2824999988079071,
+          "mean_class_acc": 0.05443265860634191
+        },
+        "linear_probe": {
+          "top1_acc": 0.6055999994277954,
+          "top5_acc": 0.8392999768257141,
+          "top10_acc": 0.9097999930381775,
+          "mean_class_acc": 0.15617574944027832
+        },
+        "lora": {
+          "top1_acc": 0.6805999875068665,
+          "top5_acc": 0.8835999965667725,
+          "top10_acc": 0.9383000135421753,
+          "mean_class_acc": 0.283898580467283
+        }
+      },
+      "gaussian_blur": {
+        "zero_shot": {
+          "top1_acc": 0.06040000170469284,
+          "top5_acc": 0.14110000431537628,
+          "top10_acc": 0.20239999890327454,
+          "mean_class_acc": 0.024304667344050748
+        },
+        "linear_probe": {
+          "top1_acc": 0.48159998655319214,
+          "top5_acc": 0.7501999735832214,
+          "top10_acc": 0.8425999879837036,
+          "mean_class_acc": 0.09587361573108605
+        },
+        "lora": {
+          "top1_acc": 0.47200000286102295,
+          "top5_acc": 0.7261999845504761,
+          "top10_acc": 0.8269000053405762,
+          "mean_class_acc": 0.11309558895939006
+        }
+      },
+      "brightness": {
+        "zero_shot": {
+          "top1_acc": 0.061400000005960464,
+          "top5_acc": 0.14399999380111694,
+          "top10_acc": 0.20909999310970306,
+          "mean_class_acc": 0.03620038203928354
+        },
+        "linear_probe": {
+          "top1_acc": 0.4932999908924103,
+          "top5_acc": 0.7631999850273132,
+          "top10_acc": 0.8519999980926514,
+          "mean_class_acc": 0.10096520813448089
+        },
+        "lora": {
+          "top1_acc": 0.5278000235557556,
+          "top5_acc": 0.7713000178337097,
+          "top10_acc": 0.8640000224113464,
+          "mean_class_acc": 0.13233614536910887
+        }
+      },
+      "occlusion": {
+        "zero_shot": {
+          "top1_acc": 0.053599998354911804,
+          "top5_acc": 0.15299999713897705,
+          "top10_acc": 0.22280000150203705,
+          "mean_class_acc": 0.03782367361443383
+        },
+        "linear_probe": {
+          "top1_acc": 0.531499981880188,
+          "top5_acc": 0.7850000262260437,
+          "top10_acc": 0.8726999759674072,
+          "mean_class_acc": 0.11496681433171034
+        },
+        "lora": {
+          "top1_acc": 0.5738999843597412,
+          "top5_acc": 0.8120999932289124,
+          "top10_acc": 0.891700029373169,
+          "mean_class_acc": 0.17546041203072157
+        }
+      }
+    },
+    "official_split": {
+      "clean": {
+        "full_finetune": {
+          "top1_acc": 0.48089998960494995,
+          "top5_acc": 0.724399983882904,
+          "top10_acc": 0.8090999722480774,
+          "mean_class_acc": 0.23466695901872806,
+          "loss": 2.447472840499878
+        }
+      },
+      "gaussian_blur": {
+        "full_finetune": {
+          "top1_acc": 0.3154999911785126,
+          "top5_acc": 0.5728999972343445,
+          "top10_acc": 0.682200014591217,
+          "mean_class_acc": 0.10967543216985326
+        }
+      },
+      "brightness": {
+        "full_finetune": {
+          "top1_acc": 0.3240000009536743,
+          "top5_acc": 0.5817999839782715,
+          "top10_acc": 0.6873999834060669,
+          "mean_class_acc": 0.12133944684769525
+        }
+      },
+      "occlusion": {
+        "full_finetune": {
+          "top1_acc": 0.38179999589920044,
+          "top5_acc": 0.6412000060081482,
+          "top10_acc": 0.7425000071525574,
+          "mean_class_acc": 0.15101787849481021
+        }
+      }
+    }
+  },
+  "lora_clean_top1": 0.7121000289916992,
+  "full_finetune_clean_top1": 0.48089998960494995,
+  "full_finetune_best_epoch": 4
+}
